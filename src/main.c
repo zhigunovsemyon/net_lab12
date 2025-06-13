@@ -43,8 +43,12 @@ int main()
 	}
 
 	int login_bad = login(cmd_sock);
-	if (login_bad < 0) {
+	if (login_bad == -1) {
 		perror("login failed");
+		close(cmd_sock);
+		return 1;
+	} else if (login_bad == -2){
+		fprintf(stderr, "Неверный пароль\n");
 		close(cmd_sock);
 		return 1;
 	}
@@ -87,14 +91,6 @@ int communication_cycle(fd_t cmd_sock)
 	char buf[buflen + 1];
 	buf[buflen] = '\0';
 	do {
-		ssize_t read_from = recv(cmd_sock, buf, buflen, 0);
-		if (read_from < 0) {
-			perror("send failed");
-			goto cycle_end;
-		}
-		buf[read_from] = '\0';
-		printf("%s", buf);
-
 		if (!fgets(buf, buflen, stdin))
 			goto cycle_end;
 
@@ -103,6 +99,15 @@ int communication_cycle(fd_t cmd_sock)
 			rc = -1;
 			goto cycle_end;
 		}
+
+		ssize_t read_from = recv(cmd_sock, buf, buflen, 0);
+		if (read_from < 0) {
+			perror("send failed");
+			goto cycle_end;
+		}
+		buf[read_from] = '\0';
+		printf("%s", buf);
+
 
 	} while (true);
 
