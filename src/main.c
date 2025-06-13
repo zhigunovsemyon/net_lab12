@@ -19,105 +19,84 @@
  */
 
 char const * NOT_FOUND_RESPONSE = "No such entry!\n";
-constexpr in_port_t PORT = 8789;
+[[maybe_unused]] constexpr in_port_t LISTEN_PORT = 18789;
 [[maybe_unused]] constexpr uint32_t LOCALHOST = (127 << 24) + 1;
 
 int communication_cycle(fd_t fd);
 
 int main()
 {
-	// Структура с адресом и портом клиента
-	struct sockaddr_in client_addr = {};
-	socklen_t client_addr_len = sizeof(client_addr);
-
 	// Структура с адресом и портом сервера
 	struct sockaddr_in server_addr = {};
 	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(PORT);
-	// server_addr.sin_addr = (struct in_addr){htonl(LOCALHOST)};
-	server_addr.sin_addr = (struct in_addr){htonl(0)};
+	server_addr.sin_port = htons(21);
+	server_addr.sin_addr = (struct in_addr){htonl(LOCALHOST)};
+	// server_addr.sin_addr = (struct in_addr){htonl(0)};
 
 	// Входящий сокет
-	fd_t serv_sock = create_bind_server_socket(&server_addr);
-	if (-1 == serv_sock) {
-		perror("Failed to create binded socket");
+	fd_t cmd_sock = create_command_socket(&server_addr);
+	if (-1 == cmd_sock) {
+		perror("Failed to create command socket");
 		return -1;
 	}
 
-	printf("Ожидание соединения на порт %hu\n", PORT);
-	fd_t client_sock = accept(serv_sock, (struct sockaddr *)&client_addr,
-				  &client_addr_len);
-	if (client_sock < 0) {
-		perror("Accept failed");
-		close(serv_sock);
-		return 1;
-	}
-	print_sockaddr_in_info(&client_addr);
-
-	int communication_cycle_bad = communication_cycle(client_sock, db);
+	int communication_cycle_bad = communication_cycle(cmd_sock);
 	if (communication_cycle_bad < 0) {
-		perror("Recv failed");
-		close(serv_sock);
-		close(client_sock);
+		perror("cycle failed");
+		close(cmd_sock);
 		return 1;
 	}
 
 	// Штатное завершение работы
 	puts("Клиент прервал соединение");
-	close(serv_sock);
-	close(client_sock);
-	// free(db_copy);
+	close(cmd_sock);
 	return 0;
 }
 
-// ssize_t handle_request(fd_t fd, Entry const * db, char const * request)
-// {
-// 	constexpr size_t sendbuf_size = 40;
-// 	char sendbuf[sendbuf_size + 1] = {};
-//
-// 	while (db->name && db->num) {
-// 		if (strcmp(db->name, request)) {
-// 			db++;
-// 			continue;
-// 		}
-//
-// 		strncpy(sendbuf, db->num, sendbuf_size);
-// 		sendbuf[strlen(sendbuf)] = '\n';
-// 		return send(fd, sendbuf, strlen(sendbuf), 0);
-// 	}
-//
-// 	return send_bad_request(fd);
-// }
-
-int communication_cycle(fd_t fd)
+[[maybe_unused]] static ssize_t send_port(fd_t cmd_sock,
+					  struct sockaddr_in const * addr)
 {
+	char buf[26];
+	// 1-4 октеты
+	uint8_t const fsto = ntohl(addr->sin_addr.s_addr) >> 24;
+	uint8_t const sndo = 0xFF & (ntohl(addr->sin_addr.s_addr) >> 16);
+	uint8_t const trdo = 0xFF & (ntohl(addr->sin_addr.s_addr) >> 8);
+	uint8_t const ftho = 0xFF & (ntohl(addr->sin_addr.s_addr));
+
+	uint16_t const port = ntohs(addr->sin_port);
+
+	sprintf(buf, "%hhu,%hhu,%hhu,%hhu,%hhu,%hhu\n", fsto, sndo, trdo, ftho,
+		port / 256, port % 256);
+	return send(cmd_sock, buf, strlen(buf), 0);
+}
+
+int communication_cycle(fd_t cmd_sock)
+{
+	int rc = 0;
 	constexpr size_t buflen = 64;
 	char buf[buflen + 1];
 	buf[buflen] = '\0';
-
+	buf[0] = '\0';
 	do {
-		ssize_t recv_ret = recv(fd, buf, buflen, 0);
-		if (recv_ret == 0) {
-			break;
-		} else if (recv_ret < 0)
-			return -1;
+		ssize_t read_from = recv(cmd_sock, buf, buflen, 0);
+		if (read_from < 0) {
+			perror("send failed");
+			goto cycle_end;
+		}
+		buf[read_from] = '\0';
+		printf("%64s", buf);
 
-		// else if (recv_ret > 0)
-		buf[recv_ret] = '\0';
+		if(!fgets(buf,buflen, stdin))
+			goto cycle_end;
 
-		// Зануление переноса строки
-		char * endl = strpbrk(buf, "\r\n");
-		if (endl)
-			*endl = '\0';
-
-		// ssize_t sent_bytes = handle_request(fd, db, buf);
-		// if (sent_bytes > 0)
-		// 	continue;
-		// else if (sent_bytes == 0)
-			// break;
-		// if error
-		return -1;
+		if (send(cmd_sock, buf, strlen(buf), 0) < 0) {
+			perror("send failed");
+			rc = -1;
+			goto cycle_end;
+		}
 
 	} while (true);
-	return 0;
+
+cycle_end:
+	return rc;
 }
