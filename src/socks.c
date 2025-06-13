@@ -15,7 +15,23 @@ void print_sockaddr_in_info(struct sockaddr_in const * addr)
 	printf(":%hu\n", ntohs(addr->sin_port));
 }
 
-fd_t create_bind_server_socket(struct sockaddr_in const * ip_info)
+fd_t create_command_socket(struct sockaddr_in const * ip_info)
+{
+	// Входящий сокет
+	fd_t sock = socket(AF_INET, SOCK_STREAM, 6);
+	if (sock == -1)
+		return -1;
+
+	// Соединение сокета с портом и адресом
+	if (connect(sock, (struct sockaddr const *)ip_info,
+		 sizeof(*ip_info))) {
+		close(sock);
+		return -1;
+	}
+
+	return sock;
+}
+fd_t create_listen_socket(struct sockaddr_in const * ip_info)
 {
 	// Входящий сокет
 	fd_t serv_sock = socket(AF_INET, SOCK_STREAM, 0);
