@@ -10,35 +10,22 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-/*
- * Добавить в сервис поддержку дополнительной команды, реализующей телефонный
- * справочник. Клиент отправляет на сервер некоторое символьное имя. Сервер
- * ищет в файле телефон, связанный с этим именем. Если в файле информация не
- * найдена, клиенту возвращается соответствующее сообщение.
-	- Входной параметр: ФИО.
-	- Ответ сервера: телефон, связанный с введённым ФИО.
+/* 	Необходимо разработать простой FTP-клиент. Для всех вариантов
+ * разработанный клиент должен иметь возможность выводить список файлов и
+ * папок корневой директории сервера (поддержка команды LIST).
+	Клиент должен использовать активный режим
+	Дополнительно к базовой функциональности необходимо выполнить
+ * индивидуальное задание: Создание и удаление каталогов на удаленном сервере.
  */
-
-// Последняя запись должна содержать null поля
-typedef struct {
-	const char * name;
-	const char * num;
-} Entry;
 
 char const * NOT_FOUND_RESPONSE = "No such entry!\n";
 constexpr in_port_t PORT = 8789;
 [[maybe_unused]] constexpr uint32_t LOCALHOST = (127 << 24) + 1;
 
-int communication_cycle(fd_t fd, Entry const * db);
+int communication_cycle(fd_t fd);
 
 int main()
 {
-	Entry const db[] = {
-		{"Вася", "7894561122"},
-		{"Петя", "1234567788"},
-		{"Ваня", "1597534466"},
-		{nullptr, nullptr}
-	};
 	// Структура с адресом и портом клиента
 	struct sockaddr_in client_addr = {};
 	socklen_t client_addr_len = sizeof(client_addr);
@@ -83,31 +70,26 @@ int main()
 	return 0;
 }
 
-static inline ssize_t send_bad_request(fd_t fd)
-{
-	return send(fd, NOT_FOUND_RESPONSE, strlen(NOT_FOUND_RESPONSE), 0);
-}
+// ssize_t handle_request(fd_t fd, Entry const * db, char const * request)
+// {
+// 	constexpr size_t sendbuf_size = 40;
+// 	char sendbuf[sendbuf_size + 1] = {};
+//
+// 	while (db->name && db->num) {
+// 		if (strcmp(db->name, request)) {
+// 			db++;
+// 			continue;
+// 		}
+//
+// 		strncpy(sendbuf, db->num, sendbuf_size);
+// 		sendbuf[strlen(sendbuf)] = '\n';
+// 		return send(fd, sendbuf, strlen(sendbuf), 0);
+// 	}
+//
+// 	return send_bad_request(fd);
+// }
 
-ssize_t handle_request(fd_t fd, Entry const * db, char const * request)
-{
-	constexpr size_t sendbuf_size = 40;
-	char sendbuf[sendbuf_size + 1] = {};
-
-	while (db->name && db->num){
-		if (strcmp(db->name,request)){
-			db++;
-			continue;
-		}
-
-		strncpy(sendbuf, db->num, sendbuf_size);
-		sendbuf[strlen(sendbuf)] = '\n';
-		return send(fd,sendbuf, strlen(sendbuf), 0);
-	}
-
-	return send_bad_request(fd);
-}
-
-int communication_cycle(fd_t fd, Entry const * db)
+int communication_cycle(fd_t fd)
 {
 	constexpr size_t buflen = 64;
 	char buf[buflen + 1];
@@ -128,11 +110,11 @@ int communication_cycle(fd_t fd, Entry const * db)
 		if (endl)
 			*endl = '\0';
 
-		ssize_t sent_bytes = handle_request(fd, db, buf);
-		if (sent_bytes > 0)
-			continue;
-		else if (sent_bytes == 0)
-			break;
+		// ssize_t sent_bytes = handle_request(fd, db, buf);
+		// if (sent_bytes > 0)
+		// 	continue;
+		// else if (sent_bytes == 0)
+			// break;
 		// if error
 		return -1;
 
