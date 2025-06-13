@@ -24,6 +24,8 @@ char const * NOT_FOUND_RESPONSE = "No such entry!\n";
 
 int communication_cycle(fd_t fd);
 
+int login(fd_t fd);
+
 int main()
 {
 	// Структура с адресом и портом сервера
@@ -38,6 +40,13 @@ int main()
 	if (-1 == cmd_sock) {
 		perror("Failed to create command socket");
 		return -1;
+	}
+
+	int login_bad = login(cmd_sock);
+	if (login_bad < 0) {
+		perror("login failed");
+		close(cmd_sock);
+		return 1;
 	}
 
 	int communication_cycle_bad = communication_cycle(cmd_sock);
@@ -72,11 +81,11 @@ int main()
 
 int communication_cycle(fd_t cmd_sock)
 {
+	printf("in cycle\n");
 	int rc = 0;
 	constexpr size_t buflen = 64;
 	char buf[buflen + 1];
 	buf[buflen] = '\0';
-	buf[0] = '\0';
 	do {
 		ssize_t read_from = recv(cmd_sock, buf, buflen, 0);
 		if (read_from < 0) {
@@ -84,9 +93,9 @@ int communication_cycle(fd_t cmd_sock)
 			goto cycle_end;
 		}
 		buf[read_from] = '\0';
-		printf("%64s", buf);
+		printf("%s", buf);
 
-		if(!fgets(buf,buflen, stdin))
+		if (!fgets(buf, buflen, stdin))
 			goto cycle_end;
 
 		if (send(cmd_sock, buf, strlen(buf), 0) < 0) {
@@ -99,4 +108,61 @@ int communication_cycle(fd_t cmd_sock)
 
 cycle_end:
 	return rc;
+}
+
+int login(fd_t cmd_sock)
+{
+	constexpr size_t buflen = 48;
+	char buf[buflen + 1];
+	buf[buflen] = 0;
+
+	//Получение заголовка
+	if (recv(cmd_sock, buf, buflen, 0) < 0) {
+		perror("recv failed");
+		return -1;
+	}
+	printf("%s", buf);
+
+	char user[101] = "USER ";
+	printf("Пользователь: ");
+	scanf("%100s", user + strlen(user));
+	strcat(user, "\n");
+	
+	//Отправка логина
+	if (send(cmd_sock, user, strlen(user), 0) < 0) {
+		perror("send failed");
+		return -1;
+	}
+	// Получение информации об ожидании пароля
+	if (recv(cmd_sock, buf, buflen, 0) < 0) {
+		perror("recv failed");
+		return -1;
+	}
+	printf("%s", buf);
+	bool not_asking_for_pass = strncmp(buf, "331", 3);
+	if (not_asking_for_pass)
+		return -1;
+
+	char pass[101] = "PASS ";
+	char * tmp_pass = getpass("Пароль: ");
+	strcat(pass, tmp_pass);
+	strcat(pass, "\n");
+	free(tmp_pass);
+
+	// Отправление пароля
+	if (send(cmd_sock, pass, strlen(pass), 0) < 0) {
+		perror("send failed");
+		return -1;
+	}
+	while ('\n' != getchar())
+		;
+
+	if (recv(cmd_sock, buf, buflen, 0) < 0) {
+		perror("recv failed");
+		return -1;
+	}
+	if(!strncmp("530", buf, 3))
+		return -2;
+
+	return 0;
 }
