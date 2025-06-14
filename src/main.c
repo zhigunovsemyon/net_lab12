@@ -132,6 +132,29 @@ fd_t set_pasv_connection(fd_t cmd_sock)
 	return create_connected_socket(&server_addr);
 }
 
+int quit(fd_t cmd_sock)
+{
+	if (send(cmd_sock, "quit\n", strlen("quit\n"), 0) < 0)
+		return -1;
+
+	ssize_t recieved;
+	constexpr ssize_t response_buf_len = 100;
+	char response[response_buf_len + 1];
+	response[response_buf_len] = '\0';
+
+	recieved = recv(cmd_sock, response, response_buf_len, 0);
+	if (recieved < 0)
+		return -1;
+	response[recieved] = '\0';
+
+	// 221 -- код выхода по quit
+	if (strncmp(response, "221 ", 4)) {
+		fprintf(stderr, "Ошибка: %s\n", response);
+		return 0;
+	}
+	return 0;
+}
+
 int list(fd_t cmd_sock, fd_t conn_sock)
 {
 	if (send(cmd_sock, "LIST\n", strlen("LIST\n"), 0) < 0)
@@ -187,7 +210,17 @@ int communication_cycle(fd_t cmd_sock)
 
 		int cmd = getchar();
 		switch (cmd) {
+		case 'q':
+		case 'Q':
+			while (getchar() != '\n')
+				;
+			// падение в eof
 		case EOF:
+			if (quit(cmd_sock) < 0) {
+				perror("quit failed");
+				close(com_sock);
+				return -1;
+			}
 			close(com_sock);
 			return 0;
 		case 'c':
@@ -209,6 +242,7 @@ int communication_cycle(fd_t cmd_sock)
 			printf("list\n");
 			if (list(cmd_sock, com_sock) < 0) {
 				perror("list failed");
+				close(com_sock);
 				return -1;
 			}
 			break;
