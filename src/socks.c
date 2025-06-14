@@ -23,14 +23,14 @@ fd_t create_connected_socket(struct sockaddr_in const * ip_info)
 		return -1;
 
 	// Соединение сокета с портом и адресом
-	if (connect(sock, (struct sockaddr const *)ip_info,
-		 sizeof(*ip_info))) {
+	if (connect(sock, (struct sockaddr const *)ip_info, sizeof(*ip_info))) {
 		close(sock);
 		return -1;
 	}
 
 	return sock;
 }
+
 // fd_t create_listen_socket(struct sockaddr_in const * ip_info)
 // {
 // 	// Входящий сокет
