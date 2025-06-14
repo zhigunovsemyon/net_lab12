@@ -256,54 +256,29 @@ int communication_cycle(fd_t cmd_sock)
 	}
 }
 
-// int communication_cycle(fd_t cmd_sock)
-// {
-// 	printf("in cycle\n");
-// 	int rc = 0;
-// 	constexpr size_t buflen = 64;
-// 	char buf[buflen + 1];
-// 	buf[buflen] = '\0';
-// 	do {
-// 		if (!fgets(buf, buflen, stdin))
-// 			goto cycle_end;
-//
-// 		if (send(cmd_sock, buf, strlen(buf), 0) < 0) {
-// 			perror("send failed");
-// 			rc = -1;
-// 			goto cycle_end;
-// 		}
-//
-// 		ssize_t read_from = recv(cmd_sock, buf, buflen, 0);
-// 		if (read_from < 0) {
-// 			perror("send failed");
-// 			goto cycle_end;
-// 		}
-// 		buf[read_from] = '\0';
-// 		printf("%s", buf);
-//
-//
-// 	} while (true);
-//
-// cycle_end : return rc;
-// }
-
 int login(fd_t cmd_sock)
 {
 	constexpr size_t buflen = 48;
 	char buf[buflen + 1];
 	buf[buflen] = 0;
+	ssize_t recieved;
 
 	// Получение заголовка
-	if (recv(cmd_sock, buf, buflen, 0) < 0) {
+	recieved = recv(cmd_sock, buf, buflen, 0);
+	if (recieved < 0) {
 		perror("recv failed");
 		return -1;
 	}
-	printf("%s", buf);
+	buf[recieved] = '\0';
+	printf("Подключено к:%s", strchr(buf, ' '));
 
-	char user[101] = "USER ";
+	constexpr int user_maxstrlen = 100;
+	char user[user_maxstrlen] = "USER ";
 	printf("Пользователь: ");
-	scanf("%100s", user + strlen(user));
-	strcat(user, "\n");
+	// Ввод за словом USER
+	if (!fgets(user + strlen(user), user_maxstrlen - (int)strlen(user),
+		   stdin))
+		return -2;
 
 	// Отправка логина
 	if (send(cmd_sock, user, strlen(user), 0) < 0) {
@@ -311,18 +286,24 @@ int login(fd_t cmd_sock)
 		return -1;
 	}
 	// Получение информации об ожидании пароля
-	if (recv(cmd_sock, buf, buflen, 0) < 0) {
+	recieved = recv(cmd_sock, buf, buflen, 0);
+	if (recieved < 0) {
 		perror("recv failed");
 		return -1;
 	}
-	printf("%s", buf);
+	buf[recieved] = '\0';
+
 	bool not_asking_for_pass = strncmp(buf, "331", 3);
 	if (not_asking_for_pass)
 		return -1;
 
 	char pass[101] = "PASS ";
-	char * tmp_pass = getpass("Пароль: ");
-	strcat(pass, tmp_pass);
+	pass[100] = '\0';
+	char * tmp_pass = getpass("Пароль: "); // не оставляет \n в stdin
+
+	ssize_t space_in_pass = (ssize_t)sizeof(pass) - (ssize_t)strlen(pass);
+	assert(space_in_pass > 0);
+	strncat(pass, tmp_pass, (size_t)space_in_pass);
 	strcat(pass, "\n");
 	free(tmp_pass);
 
@@ -331,15 +312,17 @@ int login(fd_t cmd_sock)
 		perror("send failed");
 		return -1;
 	}
-	while ('\n' != getchar())
-		;
 
-	if (recv(cmd_sock, buf, buflen, 0) < 0) {
+	recieved = recv(cmd_sock, buf, buflen, 0);
+	if (recieved < 0) {
 		perror("recv failed");
 		return -1;
 	}
-	if (!strncmp("530", buf, 3))
-		return -2;
+	buf[recieved] = '\0';
 
-	return 0;
+	// 230 -- successful login
+	if (!strncmp("230", buf, 3))
+		return 0;
+
+	return -2;
 }
