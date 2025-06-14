@@ -132,6 +132,49 @@ fd_t set_pasv_connection(fd_t cmd_sock)
 	return create_connected_socket(&server_addr);
 }
 
+int list(fd_t cmd_sock, fd_t conn_sock)
+{
+	if (send(cmd_sock, "LIST\n", strlen("LIST\n"), 0) < 0)
+		return -1;
+
+	ssize_t recieved;
+	constexpr ssize_t response_buf_len = 100;
+	char response[response_buf_len + 1];
+	response[response_buf_len] = '\0';
+
+	recieved = recv(cmd_sock, response, response_buf_len, 0);
+	if (recieved < 0)
+		return -1;
+	response[recieved] = '\0';
+
+	// 150 -- код подготовки обмена
+	if (strncmp(response, "150 ", 4)) {
+		fprintf(stderr, "Ошибка: %s\n", response);
+		return 0;
+	}
+
+	do {
+		recieved = recv(conn_sock, response, response_buf_len, 0);
+		if (recieved < 0)
+			return -1;
+		response[recieved] = '\0';
+		printf("%s", response);
+
+	} while (recieved == response_buf_len);
+
+	// Получение статуса отправки
+	recieved = recv(cmd_sock, response, response_buf_len, 0);
+	if (recieved < 0)
+		return -1;
+	response[recieved] = '\0';
+	// 226 -- код успешного обмена
+	if (strncmp(response, "226 ", 4)) {
+		fprintf(stderr, "Ошибка: %s\n", response);
+		return 0;
+	}
+	return 0;
+}
+
 int communication_cycle(fd_t cmd_sock)
 {
 	printf("in cycle\n");
@@ -140,6 +183,39 @@ int communication_cycle(fd_t cmd_sock)
 		if (-1 == com_sock) {
 			perror("Не удалось создать сокет пассивного режима");
 			return -1;
+		}
+
+		int cmd = getchar();
+		switch (cmd) {
+		case EOF:
+			close(com_sock);
+			return 0;
+		case 'c':
+		case 'C':
+			while (getchar() != '\n')
+				;
+			printf("create\n");
+			break;
+		case 'd':
+		case 'D':
+			while (getchar() != '\n')
+				;
+			printf("delete\n");
+			break;
+		case 'l':
+		case 'L':
+			while (getchar() != '\n')
+				;
+			printf("list\n");
+			if (list(cmd_sock, com_sock) < 0) {
+				perror("list failed");
+				return -1;
+			}
+			break;
+		default:
+			while (getchar() != '\n')
+				;
+			fprintf(stderr, "Неизвестная команда\n");
 		}
 
 		close(com_sock);
