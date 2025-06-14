@@ -18,8 +18,6 @@
  * индивидуальное задание: Создание и удаление каталогов на удаленном сервере.
  */
 
-char const * NOT_FOUND_RESPONSE = "No such entry!\n";
-[[maybe_unused]] constexpr in_port_t LISTEN_PORT = 18789;
 [[maybe_unused]] constexpr uint32_t LOCALHOST = (127 << 24) + 1;
 
 int communication_cycle(fd_t fd);
