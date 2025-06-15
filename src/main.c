@@ -1,10 +1,12 @@
 #include "socks.h"
 #include <assert.h>
 #include <malloc.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -21,6 +23,8 @@
 [[maybe_unused]] constexpr uint32_t LOCALHOST = (127 << 24) + 1;
 constexpr in_port_t DEFAULT_PORT = 21;
 
+int set_destination(struct sockaddr_in * addr_to_set);
+
 int communication_cycle(fd_t fd);
 
 int login(fd_t fd);
@@ -28,12 +32,11 @@ int login(fd_t fd);
 int main()
 {
 	// Структура с адресом и портом сервера
-	struct sockaddr_in server_addr = {};
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(DEFAULT_PORT);
-	server_addr.sin_addr = (struct in_addr){htonl(LOCALHOST)};
-	// server_addr.sin_addr = (struct in_addr){htonl(0)};
-
+	struct sockaddr_in server_addr;
+	if(set_destination(&server_addr)){
+		fputs("Неправильно указан адрес!\n",stderr);
+		return 1;
+	}
 	// Входящий сокет
 	fd_t cmd_sock = create_connected_socket(&server_addr);
 	if (-1 == cmd_sock) {
@@ -62,6 +65,41 @@ int main()
 	// Штатное завершение работы
 	puts("Клиент прервал соединение");
 	close(cmd_sock);
+	return 0;
+}
+
+int set_destination(struct sockaddr_in * addr_to_set)
+{
+	constexpr size_t dest_str_size = 24;
+	char dest_str[dest_str_size + 1];
+	printf("IPv4-адрес[:порт]: ");
+	if (!fgets(dest_str, dest_str_size, stdin))
+		return -1;
+
+	memset(addr_to_set, 0, sizeof(*addr_to_set));
+	addr_to_set->sin_family = AF_INET;
+
+	char * port_str = strchr(dest_str, ':');
+	// Если порт не указан
+	if (!port_str) {
+		// Установка стандартного порта
+		addr_to_set->sin_port = htons(DEFAULT_PORT);
+	} else {
+		// Непосредственно установка порта
+		int new_port = atoi(1 + port_str);
+		addr_to_set->sin_port = (new_port < 1 || new_port > UINT16_MAX)
+						? htons(DEFAULT_PORT)
+						: htons((in_port_t)new_port);
+
+		// При установке IP :порт считываться не будет
+		*port_str = '\0';
+	}
+
+	// Установка IP адреса
+	addr_to_set->sin_addr.s_addr = inet_addr(dest_str);
+	if (addr_to_set->sin_addr.s_addr == (in_addr_t)-1)
+		return -1;
+
 	return 0;
 }
 
