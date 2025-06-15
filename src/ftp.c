@@ -161,7 +161,6 @@ static int list(fd_t cmd_sock, fd_t conn_sock)
 
 int communication_cycle(fd_t cmd_sock)
 {
-	printf("in cycle\n");
 	for (;;) {
 		fd_t com_sock = set_pasv_connection(cmd_sock);
 		if (-1 == com_sock) {
@@ -169,7 +168,14 @@ int communication_cycle(fd_t cmd_sock)
 			return -1;
 		}
 
+		printf("Введите одну из комманд:\n"
+		       "l -- список файлов\n"
+		       "d -- удалить папку\n"
+		       "с -- создать папку\n"
+		       "q/C-d -- завершение соединения\n"
+		       "-> ");
 		int cmd = getchar();
+
 		switch (cmd) {
 		case 'q':
 		case 'Q':
