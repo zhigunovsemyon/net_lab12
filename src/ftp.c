@@ -283,7 +283,6 @@ int communication_cycle(fd_t cmd_sock)
 		case 'C':
 			while (getchar() != '\n')
 				;
-			printf("create\n");
 			rc = create_dir(cmd_sock);
 			if (rc < 0) {
 				perror("create_dir failed");
@@ -304,7 +303,6 @@ int communication_cycle(fd_t cmd_sock)
 		case 'D':
 			while (getchar() != '\n')
 				;
-			printf("delete\n");
 			rc = rm_dir(cmd_sock);
 			if (rc < 0) {
 				perror("rm_dir failed");
