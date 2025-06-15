@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 constexpr in_port_t DEFAULT_PORT = 21;
@@ -93,6 +94,50 @@ static fd_t set_pasv_connection(fd_t cmd_sock)
 	return create_connected_socket(&server_addr);
 }
 
+// -1 при ошибке передачи, 1 при EOF, 0 при успехе
+static int create_dir(fd_t cmd_sock)
+{
+	constexpr size_t dirname_bufsize = 100;
+	char dirname[dirname_bufsize + 1];
+	printf("Каталог: ");
+	if (!fgets(dirname, dirname_bufsize, stdin))
+		return 1;
+
+	char * endl = strchr(dirname, '\n');
+	if (!endl) {
+		ssize_t buf_space =
+			(ssize_t)dirname_bufsize - (ssize_t)strlen(dirname) - 1;
+		assert(buf_space >= 0);
+		if (!buf_space) {
+			fprintf(stderr, "Слишком длинное имя каталога!\n");
+			return 0;
+		}
+		strcat(dirname, "\n");
+	}
+
+	if (send(cmd_sock, "MKD ", strlen("MKD "), 0) < 0)
+		return -1;
+	if (send(cmd_sock, dirname, strlen(dirname), 0) < 0)
+		return -1;
+
+	ssize_t recieved;
+	constexpr ssize_t response_buf_len = 100;
+	char response[response_buf_len + 1];
+	response[response_buf_len] = '\0';
+
+	recieved = recv(cmd_sock, response, response_buf_len, 0);
+	if (recieved < 0)
+		return -1;
+	response[recieved] = '\0';
+
+	// 257 -- код создания каталога
+	if (strncmp(response, "257 ", 4)) {
+		fprintf(stderr, "Ошибка: %s\n", response);
+		return 0;
+	}
+	return 0;
+}
+
 static int quit(fd_t cmd_sock)
 {
 	if (send(cmd_sock, "quit\n", strlen("quit\n"), 0) < 0)
@@ -161,6 +206,7 @@ static int list(fd_t cmd_sock, fd_t conn_sock)
 
 int communication_cycle(fd_t cmd_sock)
 {
+	int rc;
 	for (;;) {
 		fd_t com_sock = set_pasv_connection(cmd_sock);
 		if (-1 == com_sock) {
@@ -195,6 +241,21 @@ int communication_cycle(fd_t cmd_sock)
 			while (getchar() != '\n')
 				;
 			printf("create\n");
+			rc = create_dir(cmd_sock);
+			if (rc < 0) {
+				perror("quit failed");
+				close(com_sock);
+				return -1;
+			}
+			if (rc > 0) { // EOF
+				if (quit(cmd_sock) < 0) {
+					perror("quit failed");
+					close(com_sock);
+					return -1;
+				}
+				close(com_sock);
+				return 0;
+			}
 			break;
 		case 'd':
 		case 'D':
@@ -206,7 +267,6 @@ int communication_cycle(fd_t cmd_sock)
 		case 'L':
 			while (getchar() != '\n')
 				;
-			printf("list\n");
 			if (list(cmd_sock, com_sock) < 0) {
 				perror("list failed");
 				close(com_sock);
