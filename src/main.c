@@ -19,6 +19,7 @@
  */
 
 [[maybe_unused]] constexpr uint32_t LOCALHOST = (127 << 24) + 1;
+constexpr in_port_t DEFAULT_PORT = 21;
 
 int communication_cycle(fd_t fd);
 
@@ -29,7 +30,7 @@ int main()
 	// Структура с адресом и портом сервера
 	struct sockaddr_in server_addr = {};
 	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(21);
+	server_addr.sin_port = htons(DEFAULT_PORT);
 	server_addr.sin_addr = (struct in_addr){htonl(LOCALHOST)};
 	// server_addr.sin_addr = (struct in_addr){htonl(0)};
 
