@@ -64,23 +64,6 @@ int main()
 	return 0;
 }
 
-[[maybe_unused]] static ssize_t send_port(fd_t cmd_sock,
-					  struct sockaddr_in const * addr)
-{
-	char buf[26];
-	// 1-4 октеты
-	uint8_t const fsto = ntohl(addr->sin_addr.s_addr) >> 24;
-	uint8_t const sndo = 0xFF & (ntohl(addr->sin_addr.s_addr) >> 16);
-	uint8_t const trdo = 0xFF & (ntohl(addr->sin_addr.s_addr) >> 8);
-	uint8_t const ftho = 0xFF & (ntohl(addr->sin_addr.s_addr));
-
-	uint16_t const port = ntohs(addr->sin_port);
-
-	sprintf(buf, "%hhu,%hhu,%hhu,%hhu,%hhu,%hhu\n", fsto, sndo, trdo, ftho,
-		port / 256, port % 256);
-	return send(cmd_sock, buf, strlen(buf), 0);
-}
-
 int set_ip_from_pasv_responce(char const * str,
 			      struct sockaddr_in * addr_to_set)
 {
