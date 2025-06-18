@@ -93,6 +93,7 @@ static fd_t set_pasv_connection(fd_t cmd_sock)
 	// -1 по ошибке, либо нормальный сокет
 	return create_connected_socket(&server_addr);
 }
+
 // -1 при ошибке передачи, 1 при EOF, 0 при успехе
 static int rm_dir(fd_t cmd_sock)
 {
@@ -204,10 +205,18 @@ static int quit(fd_t cmd_sock)
 	return 0;
 }
 
-static int list(fd_t cmd_sock, fd_t conn_sock)
+static int list(fd_t cmd_sock)
 {
-	if (send(cmd_sock, "LIST\n", strlen("LIST\n"), 0) < 0)
+	fd_t conn_sock = set_pasv_connection(cmd_sock);
+	if (-1 == conn_sock) {
+		perror("Не удалось создать сокет пассивного режима");
 		return -1;
+	}
+
+	if (send(cmd_sock, "LIST\n", strlen("LIST\n"), 0) < 0) {
+		close(conn_sock);
+		return -1;
+	}
 
 	ssize_t recieved;
 	constexpr ssize_t response_buf_len = 100;
@@ -215,20 +224,25 @@ static int list(fd_t cmd_sock, fd_t conn_sock)
 	response[response_buf_len] = '\0';
 
 	recieved = recv(cmd_sock, response, response_buf_len, 0);
-	if (recieved < 0)
+	if (recieved < 0) {
+		close(conn_sock);
 		return -1;
+	}
 	response[recieved] = '\0';
 
 	// 150 -- код подготовки обмена
 	if (strncmp(response, "150 ", 4)) {
 		fprintf(stderr, "Ошибка: %s\n", response);
+		close(conn_sock);
 		return 0;
 	}
 
 	do {
 		recieved = recv(conn_sock, response, response_buf_len, 0);
-		if (recieved < 0)
+		if (recieved < 0) {
+			close(conn_sock);
 			return -1;
+		}
 		response[recieved] = '\0';
 		printf("%s", response);
 
@@ -236,14 +250,17 @@ static int list(fd_t cmd_sock, fd_t conn_sock)
 
 	// Получение статуса отправки
 	recieved = recv(cmd_sock, response, response_buf_len, 0);
-	if (recieved < 0)
+	if (recieved < 0) {
+		close(conn_sock);
 		return -1;
-	response[recieved] = '\0';
-	// 226 -- код успешного обмена
-	if (strncmp(response, "226 ", 4)) {
-		fprintf(stderr, "Ошибка: %s\n", response);
-		return 0;
 	}
+	response[recieved] = '\0';
+
+	// 226 -- код успешного обмена
+	if (strncmp(response, "226 ", 4))
+		fprintf(stderr, "Ошибка: %s\n", response);
+
+	close(conn_sock);
 	return 0;
 }
 
@@ -251,12 +268,6 @@ int communication_cycle(fd_t cmd_sock)
 {
 	int rc;
 	for (;;) {
-		fd_t com_sock = set_pasv_connection(cmd_sock);
-		if (-1 == com_sock) {
-			perror("Не удалось создать сокет пассивного режима");
-			return -1;
-		}
-
 		printf("Введите одну из комманд:\n"
 		       "l -- список файлов\n"
 		       "d -- удалить папку\n"
@@ -274,10 +285,8 @@ int communication_cycle(fd_t cmd_sock)
 		case EOF:
 			if (quit(cmd_sock) < 0) {
 				perror("quit failed");
-				close(com_sock);
 				return -1;
 			}
-			close(com_sock);
 			return 0;
 		case 'c':
 		case 'C':
@@ -286,16 +295,13 @@ int communication_cycle(fd_t cmd_sock)
 			rc = create_dir(cmd_sock);
 			if (rc < 0) {
 				perror("create_dir failed");
-				close(com_sock);
 				return -1;
 			}
 			if (rc > 0) { // EOF
 				if (quit(cmd_sock) < 0) {
 					perror("quit failed");
-					close(com_sock);
 					return -1;
 				}
-				close(com_sock);
 				return 0;
 			}
 			break;
@@ -306,16 +312,13 @@ int communication_cycle(fd_t cmd_sock)
 			rc = rm_dir(cmd_sock);
 			if (rc < 0) {
 				perror("rm_dir failed");
-				close(com_sock);
 				return -1;
 			}
 			if (rc > 0) { // EOF
 				if (quit(cmd_sock) < 0) {
 					perror("quit failed");
-					close(com_sock);
 					return -1;
 				}
-				close(com_sock);
 				return 0;
 			}
 			break;
@@ -323,9 +326,8 @@ int communication_cycle(fd_t cmd_sock)
 		case 'L':
 			while (getchar() != '\n')
 				;
-			if (list(cmd_sock, com_sock) < 0) {
+			if (list(cmd_sock) < 0) {
 				perror("list failed");
-				close(com_sock);
 				return -1;
 			}
 			break;
@@ -334,8 +336,6 @@ int communication_cycle(fd_t cmd_sock)
 				;
 			fprintf(stderr, "Неизвестная команда\n");
 		}
-
-		close(com_sock);
 	}
 }
 
